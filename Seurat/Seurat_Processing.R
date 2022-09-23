@@ -30,3 +30,58 @@ Seurat_PreProcess <- function(combined, vars.to.regress, ndims, res){
   
   return(combined)
 }
+
+
+
+#' Add supplementary information for FindAllMarkers results. 
+#' Add exp.pct and exp.avg per cluster, exp.pct/exp.avg difference in target and background cluster
+#'
+#' @param obj A seurat obj intended to be added meta
+#' @param mk Results from FindAllMarkers
+#' 
+#' @return dataframe with supplementary information
+#' 
+
+AddMeta_Mk <- function(obj, mk){
+  
+  obj <- ScaleData(obj, features = mk$gene)
+  
+  # per cluster
+  df.ls <- as.character(unique(mk$cluster)) %>% map(~{
+    mg <- mk$gene[which(mk$cluster == .x)]
+    gp <- DotPlot(obj, features = mg)
+    df <- gp$data
+    
+    # calculate pct and avg.exp per cluster
+    freq.df <- dcast(df, features.plot ~ id, value.var='pct.exp')
+    freq.df[,-1] <- freq.df[,-1]/100
+    exp.df <- dcast(df, features.plot ~ id, value.var='avg.exp')
+    
+    # set the target and max-non-target value
+    bg.cluster <- setdiff(unique(mk$cluster), .x)
+    freq.df$target <- freq.df[,.x]
+    freq.df$bg <- apply(freq.df[, bg.cluster], 1, max)
+    freq.df$diff <- freq.df$target - freq.df$bg
+    
+    exp.df$target <- exp.df[,.x]
+    exp.df$bg <- apply(exp.df[, bg.cluster], 1, max)
+    exp.df$diff <- exp.df$target - exp.df$bg
+    
+    # merge freq and exp
+    colnames(freq.df)[-1] <- paste0('pct.', colnames(freq.df)[-1])
+    colnames(exp.df)[-1] <- paste0('exp.', colnames(exp.df)[-1])
+    
+    
+    df <- cbind(freq.df, exp.df[, -1])
+    df <- df[match(mg, df$features.plot), ]
+    
+    return(df)
+    
+  })
+  
+  df.all <- do.call('rbind', df.ls)
+  
+  mk <- cbind(mk, df.all)
+  
+  return(mk)
+}
