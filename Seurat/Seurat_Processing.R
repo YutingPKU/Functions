@@ -11,6 +11,7 @@ library(tidyverse)
 #' Pre-process for seurat obj by standard log2 method
 #'
 #' @param combined A seurat obj intended to be pre-processed
+#' @param normal A boolean value indicating whther to normalize
 #' @param vars.to.regress Variables to regress out (previously latent.vars in RegressOut). For example, nUMI, or percent.mito.
 #' @param ndims Which dimensions to use as input features, used only if features is NULL
 #' @param res Value of the resolution parameter, use a value above (below) 1.0 if you want to obtain a larger (smaller) number of communities
@@ -18,9 +19,11 @@ library(tidyverse)
 #' @return seurat obj with normalized, clustering and dimension reduction
 #' 
 
-Seurat_PreProcess <- function(combined, vars.to.regress, ndims, res){
+Seurat_PreProcess <- function(combined, normal = F, vars.to.regress, ndims, res){
+  if(normal){
+    combined <- NormalizeData(combined)
+  }
   combined %<>%
-    NormalizeData() %>%
     FindVariableFeatures(selection.method = 'vst', nfeatures = 2000) %>%
     ScaleData(vars.to.regress = vars.to.regress) %>%
     RunPCA(features = VariableFeatures(object = .)) %>%
@@ -38,11 +41,12 @@ Seurat_PreProcess <- function(combined, vars.to.regress, ndims, res){
 #'
 #' @param obj A seurat obj intended to be added meta
 #' @param mk Results from FindAllMarkers
+#' @param celltype Vectors for all clusters intended to compare
 #' 
 #' @return dataframe with supplementary information
 #' 
 
-AddMeta_Mk <- function(obj, mk){
+AddMeta_Mk <- function(obj, mk, celltype){
   
   obj <- ScaleData(obj, features = mk$gene)
   
@@ -58,7 +62,7 @@ AddMeta_Mk <- function(obj, mk){
     exp.df <- dcast(df, features.plot ~ id, value.var='avg.exp')
     
     # set the target and max-non-target value
-    bg.cluster <- setdiff(unique(mk$cluster), .x)
+    bg.cluster <- setdiff(celltype, .x)
     freq.df$target <- freq.df[,.x]
     freq.df$bg <- apply(freq.df[, bg.cluster], 1, max)
     freq.df$diff <- freq.df$target - freq.df$bg
